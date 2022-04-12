@@ -90,6 +90,7 @@ struct proc {
   enum procstate state;        // Process state
   void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
+  int paused;                  // If non-zero, have been paused
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
 
