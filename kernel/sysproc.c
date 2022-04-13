@@ -110,3 +110,18 @@ sys_pause_system(void)
 
   return pause_system(seconds);
 }
+
+uint64
+sys_kill_system(void)
+{
+  int seconds;
+
+  if(argint(0, &seconds) < 0)
+    return -1;
+
+  acquire(&tickslock);
+  pause_ticks = ticks;
+  release(&tickslock);
+
+  return pause_system(seconds);
+}

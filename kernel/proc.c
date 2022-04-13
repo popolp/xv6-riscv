@@ -656,9 +656,6 @@ procdump(void)
   }
 }
 
-// Kill the process with the given pid.
-// The victim won't exit until it tries to return
-// to user space (see usertrap() in trap.c).
 int
 pause_system(int seconds)
 {
@@ -668,6 +665,25 @@ pause_system(int seconds)
     acquire(&p->lock);
     if(p->state == RUNNING){
       p->paused = 1;
+    }
+    release(&p->lock);
+  }
+  return -1;
+}
+
+int
+kill_system(void)
+{
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid != initproc->pid){
+      p->killed = 1;
+      if(p->state == SLEEPING){
+        // Wake process from sleep().
+        p->state = RUNNABLE;
+      }
     }
     release(&p->lock);
   }
