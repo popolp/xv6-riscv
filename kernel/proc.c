@@ -12,6 +12,8 @@ struct proc proc[NPROC];
 
 struct proc *initproc;
 
+int sh_pid = 2;
+
 int pause_seconds = 0;
 int nextpid = 1;
 struct spinlock pid_lock;
@@ -244,7 +246,6 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-
   release(&p->lock);
 }
 
@@ -453,6 +454,7 @@ scheduler(void)
         // to release its lock and then reacquire it
         // before jumping back to us.
         p->state = RUNNING;
+        printf("proc name: %s proc id:%d\n",p->name, p->pid);
         c->proc = p;
         swtch(&c->context, &p->context);
 
@@ -678,7 +680,7 @@ kill_system(void)
 
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
-    if(p->pid != initproc->pid){
+    if(p->pid > sh_pid){
       p->killed = 1;
       if(p->state == SLEEPING){
         // Wake process from sleep().
