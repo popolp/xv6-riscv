@@ -12,6 +12,7 @@ struct proc proc[NPROC];
 
 struct proc *initproc;
 
+int pause_seconds = 0;
 int nextpid = 1;
 struct spinlock pid_lock;
 
@@ -447,7 +448,7 @@ scheduler(void)
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
+      if(p->state == RUNNABLE && (ticks - pause_ticks > (pause_seconds * 10^7))) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
@@ -579,7 +580,7 @@ int
 kill(int pid)
 {
   struct proc *p;
-  
+
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     if(p->pid == pid){
@@ -662,13 +663,11 @@ int
 pause_system(int seconds)
 {
   struct proc *p;
-
+  pause_seconds = seconds;
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
-    if(ticks - pause_ticks < seconds && p->state == RUNNING){
+    if(p->state == RUNNING){
       p->paused = 1;
-      release(&p->lock);
-      return 0;
     }
     release(&p->lock);
   }

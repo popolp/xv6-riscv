@@ -8,7 +8,7 @@
 
 struct spinlock tickslock;
 uint ticks;
-uint pause_ticks;
+uint pause_ticks = 0;
 
 extern char trampoline[], uservec[], userret[];
 
@@ -76,6 +76,9 @@ usertrap(void)
 
   if(p->killed)
     exit(-1);
+
+  if(p->paused)
+    p->state = RUNNABLE;
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
