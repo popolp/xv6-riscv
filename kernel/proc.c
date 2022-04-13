@@ -449,12 +449,13 @@ scheduler(void)
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      if(p->state == RUNNABLE && (ticks - pause_ticks > (pause_seconds * 10^7))) {
+      if(p->state == RUNNABLE && (ticks - pause_ticks) > (pause_seconds * 10^7))
+      { 
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
         p->state = RUNNING;
-        printf("proc name: %s proc id:%d\n",p->name, p->pid);
+        // printf("proc name: %s proc id:%d\n",p->name, p->pid);
         c->proc = p;
         swtch(&c->context, &p->context);
 
@@ -661,15 +662,8 @@ procdump(void)
 int
 pause_system(int seconds)
 {
-  struct proc *p;
   pause_seconds = seconds;
-  for(p = proc; p < &proc[NPROC]; p++){
-    acquire(&p->lock);
-    if(p->state == RUNNING){
-      p->paused = 1;
-    }
-    release(&p->lock);
-  }
+  yield();
   return -1;
 }
 
