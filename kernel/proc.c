@@ -664,7 +664,7 @@ pause_system(int seconds)
 {
   pause_seconds = seconds;
   yield();
-  return -1;
+  return 0;
 }
 
 int
