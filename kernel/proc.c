@@ -442,10 +442,19 @@ wait(uint64 addr)
 void
 scheduler(void)
 {
-  #ifdef  POLICY
-  printf( "Hello!\n" );
+
+  #ifndef  RR
+  printf( "NOT RR\n");
   #endif
-  printf( "Hello! outside \n" );
+
+  #ifndef  FCFS
+  printf( "NOT FCFS\n");
+  #endif
+
+  #ifndef  SJF
+  printf( "NOT SJF\n");
+  #endif
+
 
   struct proc *p;
   struct cpu *c = mycpu();
