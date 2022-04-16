@@ -13,6 +13,7 @@ struct proc proc[NPROC];
 struct proc *initproc;
 
 int sh_pid = 2;
+uint rate = 5;
 
 int pause_seconds = 0;
 int nextpid = 1;
@@ -167,6 +168,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->last_ticks = 0;
+  p->mean_ticks = 0;
 }
 
 // Create a user page table for a given process,
@@ -439,15 +442,21 @@ wait(uint64 addr)
 void
 scheduler(void)
 {
+  #ifdef  POLICY
+  printf( "Hello!\n" );
+  #endif
+  printf( "Hello! outside \n" );
+
   struct proc *p;
   struct cpu *c = mycpu();
-  
   c->proc = 0;
+
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 
     for(p = proc; p < &proc[NPROC]; p++) {
+      
       acquire(&p->lock);
       if(p->state == RUNNABLE && (ticks - pause_ticks) > (pause_seconds * 10^7))
       { 
@@ -457,10 +466,19 @@ scheduler(void)
         p->state = RUNNING;
         // printf("proc name: %s proc id:%d\n",p->name, p->pid);
         c->proc = p;
+
+        // Save ticks before process runtime
+        acquire(&tickslock);
+        current_ticks = ticks;
+        release(&tickslock);
+
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
+        // Update running length before releasing
+        c->proc->last_ticks = ticks - current_ticks;
+        c->proc->mean_ticks = ((10 - rate) * c->proc->mean_ticks + c->proc->last_ticks * (rate)) / 10;
         c->proc = 0;
       }
       release(&p->lock);
