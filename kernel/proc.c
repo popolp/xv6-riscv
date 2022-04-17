@@ -500,7 +500,6 @@ SJF_scheduler(void){
         // to release its lock and then reacquire it
         // before jumping back to us.
         p_mean->state = RUNNING;
-        // printf("proc name: %s proc id:%d\n",p->name, p->pid);
         c->proc = p_mean;
 
         // Save ticks before process runtime
@@ -553,7 +552,6 @@ FCFS_scheduler(void){
         // to release its lock and then reacquire it
         // before jumping back to us.
         p_FC->state = RUNNING;
-        // printf("proc name: %s proc id:%d\n",p->name, p->pid);
         c->proc = p_FC;
 
         swtch(&c->context, &p_FC->context);
@@ -577,7 +575,7 @@ void
 scheduler(void)
 {
 
-  #ifdef RR
+  #ifdef DEFAULT
   default_scheduler();
   #endif
 
