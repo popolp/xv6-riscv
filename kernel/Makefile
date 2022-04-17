@@ -160,7 +160,7 @@ CPUS := 3
 endif
 
 ifndef SCHEDFLAG
-SCHEDFLAG := RR
+SCHEDFLAG := DEFAU
 endif
 
 QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
