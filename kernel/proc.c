@@ -432,30 +432,41 @@ wait(uint64 addr)
   }
 }
 
-// Per-CPU process scheduler.
-// Each CPU calls scheduler() after setting itself up.
-// Scheduler never returns.  It loops, doing:
-//  - choose a process to run.
-//  - swtch to start running that process.
-//  - eventually that process transfers control
-//    via swtch back to the scheduler.
 void
-scheduler(void)
-{
+default_scheduler(void){
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
 
-  #ifndef  RR
-  printf( "NOT RR\n");
-  #endif
+  for(;;){
+    // Avoid deadlock by ensuring that devices can interrupt.
+    intr_on();
 
-  #ifndef  FCFS
-  printf( "NOT FCFS\n");
-  #endif
+    for(p = proc; p < &proc[NPROC]; p++) {
+      
+      acquire(&p->lock);
+      if(p->state == RUNNABLE && (ticks - pause_ticks) > (pause_seconds * 10^7))
+      { 
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p->state = RUNNING;
+        // printf("proc name: %s proc id:%d\n",p->name, p->pid);
+        c->proc = p;
 
-  #ifndef  SJF
-  printf( "NOT SJF\n");
-  #endif
+        swtch(&c->context, &p->context);
 
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+      release(&p->lock);
+    }
+  }
+}
 
+void
+SJF_scheduler(void){
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
@@ -493,6 +504,63 @@ scheduler(void)
       release(&p->lock);
     }
   }
+}
+
+void
+FCFS_scheduler(void){
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+
+  for(;;){
+    // Avoid deadlock by ensuring that devices can interrupt.
+    intr_on();
+
+    for(p = proc; p < &proc[NPROC]; p++) {
+      
+      acquire(&p->lock);
+      if(p->state == RUNNABLE && (ticks - pause_ticks) > (pause_seconds * 10^7))
+      { 
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p->state = RUNNING;
+        // printf("proc name: %s proc id:%d\n",p->name, p->pid);
+        c->proc = p;
+
+        swtch(&c->context, &p->context);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+      release(&p->lock);
+    }
+  }
+}
+// Per-CPU process scheduler.
+// Each CPU calls scheduler() after setting itself up.
+// Scheduler never returns.  It loops, doing:
+//  - choose a process to run.
+//  - swtch to start running that process.
+//  - eventually that process transfers control
+//    via swtch back to the scheduler.
+void
+scheduler(void)
+{
+
+  #ifdef RR
+  default_scheduler();
+  #endif
+
+  #ifdef FCFS
+  FCFS_scheduler();
+  #endif
+
+  #ifdef SJF
+  SJF_scheduler();
+  #endif
+
 }
 
 // Switch to scheduler.  Must hold only p->lock
