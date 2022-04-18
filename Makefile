@@ -134,7 +134,7 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 	$U/_syscall\
-#	$U/_env_freq\
+	$U/_env_freq\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

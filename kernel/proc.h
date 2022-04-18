@@ -96,6 +96,11 @@ struct proc {
   uint last_ticks;
   uint mean_ticks;
   uint last_runnable_time;
+  int should_run;             // If none zero the proc should run now
+  uint sleeping_time;
+  uint runnable_time;
+  uint running_time;
+  uint state_time;             // The thme that a process gets into SLEEPING/RUNNABLE/RUNNING state
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process
