@@ -877,7 +877,9 @@ kill_system(void)
 void
 print_stats(void)
 {
-  printf("sleeping_processes_mean: %d\n", sleeping_processes_mean);
-  printf("runnable_processes_mean: %d\n", runnable_processes_mean);
-  printf("running_processes_mean: %d\n", running_processes_mean);
+  printf("sleeping_processes_mean: %x\n", sleeping_processes_mean);
+  printf("runnable_processes_mean: %x\n", runnable_processes_mean);
+  printf("running_processes_mean: %x\n", running_processes_mean);
+  printf("program_time: %x\n", program_time);
+  printf("cpu_utilization: %x\n", cpu_utilization);
 }
