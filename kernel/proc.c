@@ -20,7 +20,7 @@ uint running_processes_mean = 0;
 uint runnable_processes_mean = 0;
 int processes_num = 0;
 
-struct spinlock processes_num_lock;
+struct spinlock process_exit_lock;
 
 uint program_time = 0;
 uint start_time;
@@ -62,15 +62,14 @@ void
 procinit(void)
 {
   struct proc *p;
-  
-  start_time = ticks;
 
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->kstack = KSTACK((int) (p - proc));
-  }
+  }  
+  start_time = ticks;
 }
 
 // Must be called with interrupts disabled,
@@ -397,14 +396,16 @@ exit(int status)
   p->xstate = status;
   p->state = ZOMBIE;
 
-  acquire(&processes_num_lock);
-  processes_num++;
-  sleeping_processes_mean = ((sleeping_processes_mean * processes_num) + p->sleeping_time) / 11;
-  runnable_processes_mean = ((runnable_processes_mean * processes_num) + p->runnable_time) / 11;
-  running_processes_mean = ((running_processes_mean * processes_num) + p->running_time) / 11;
+  acquire(&process_exit_lock);
+  
+  sleeping_processes_mean = ((sleeping_processes_mean * processes_num) + p->sleeping_time) / (processes_num + 1);
+  runnable_processes_mean = ((runnable_processes_mean * processes_num) + p->runnable_time) / (processes_num + 1);
+  running_processes_mean = ((running_processes_mean * processes_num) + p->running_time) / (processes_num + 1);
   program_time = program_time + p->running_time;
-  cpu_utilization = program_time / (ticks - start_time);
-  release(&processes_num_lock);
+  cpu_utilization = (program_time * 100) / (ticks - start_time);
+  processes_num++;
+
+  release(&process_exit_lock);
 
   p->should_run = 0;
 
@@ -542,6 +543,7 @@ SJF_scheduler(void){
           p_mean->should_run = 1;      // This process should run until exit or blocked
 
         p_mean->runnable_time = p_mean->runnable_time + (ticks - p_mean->last_runnable_time);
+        //printf("runnable time: %d pid: %d\n", p_mean->runnable_time, p_mean->pid);
         p_mean->state = RUNNING;
         p_mean->state_time = ticks;
         c->proc = p_mean;
@@ -877,9 +879,9 @@ kill_system(void)
 void
 print_stats(void)
 {
-  printf("sleeping_processes_mean: %x\n", sleeping_processes_mean);
-  printf("runnable_processes_mean: %x\n", runnable_processes_mean);
-  printf("running_processes_mean: %x\n", running_processes_mean);
-  printf("program_time: %x\n", program_time);
-  printf("cpu_utilization: %x\n", cpu_utilization);
+  printf("sleeping_processes_mean: %d\n", sleeping_processes_mean);
+  printf("runnable_processes_mean: %d\n", runnable_processes_mean);
+  printf("running_processes_mean: %d\n", running_processes_mean);
+  printf("program_time: %d\n", program_time);
+  printf("cpu_utilization: %d\n", cpu_utilization);
 }
