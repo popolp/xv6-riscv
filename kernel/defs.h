@@ -110,6 +110,7 @@ void            procdump(void);
 int             pause_system(int);
 int             kill_system(void);
 void            print_stats(void);
+int             get_utilization(void);
 
 // swtch.S
 void            swtch(struct context*, struct context*);

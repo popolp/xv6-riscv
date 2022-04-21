@@ -100,7 +100,7 @@ struct proc {
   uint sleeping_time;
   uint runnable_time;
   uint running_time;
-  uint state_time;             // The thme that a process gets into SLEEPING/RUNNABLE/RUNNING state
+  uint state_time;             // The time that a process gets into SLEEPING/RUNNABLE/RUNNING state
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process

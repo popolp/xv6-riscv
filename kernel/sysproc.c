@@ -123,3 +123,9 @@ sys_print_stats(void)
   print_stats();
   return 0;
 }
+
+uint64
+sys_get_utilization(void)
+{
+  return get_utilization();
+}
