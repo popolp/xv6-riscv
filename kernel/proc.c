@@ -22,6 +22,10 @@ extern char trampoline[]; // trampoline.S
 
 extern uint64 cas(volatile void *addr, int expected , int newval);
 
+int next_unused = -1;
+int next_sleeping = -1;
+int next_zombie = -1;
+
 // helps ensure that wakeups of wait()ing
 // parents are not lost. helps obey the
 // memory model when using p->parent.
@@ -170,6 +174,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->running_cpu = 0;
+  p->next_proc = -1;
 }
 
 // Create a user page table for a given process,
@@ -659,4 +665,26 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+void
+new_head(int new_head, int old_head)
+{
+  do
+  {
+    struct proc *p_O_head = &proc[old_head]; // check if need to write &proc[]
+    struct proc *p_N_head = &proc[new_head]; // check if need to write &proc[]
+  } while (cas(&(p_O_head->pid), old_head, p_N_head));
+}
+
+int
+set_cpu(int cpu_num){
+  struct proc *p = myproc();
+  struct cpu *c = &cpus[cpu_num]; // check if need to write &cpus[]
+  int old_last;
+  p->running_cpu = cpu_num;
+  do {
+    old_last = c->last_proc;
+  } while(cas(&c->last_proc, old_last, p->pid));
+  &proc[old_last].next_proc = p->pid; // check if need to write &proc[]
 }
