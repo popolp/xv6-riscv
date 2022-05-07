@@ -22,7 +22,7 @@ extern char trampoline[]; // trampoline.S
 
 extern uint64 cas(volatile void *addr, int expected , int newval);
 
-int next_unused = -1;
+int next_unused = -1;     
 int next_sleeping = -1;
 int next_zombie = -1;
 
@@ -325,6 +325,9 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  np->running_cpu = p->running_cpu;
+  if (add_to_last(&cpus[p->running_cpu].first_proc, np->pid) == -1)
+      &cpus[p->running_cpu].first_proc = np->pid;
   release(&np->lock);
 
   return pid;
@@ -670,21 +673,47 @@ procdump(void)
 void
 new_head(int new_head, int old_head)
 {
-  do
-  {
-    struct proc *p_O_head = &proc[old_head]; // check if need to write &proc[]
-    struct proc *p_N_head = &proc[new_head]; // check if need to write &proc[]
-  } while (cas(&(p_O_head->pid), old_head, p_N_head));
+  struct proc *p_O_head;
+  struct proc *p_N_head;
+  do {
+    p_O_head = &proc[old_head];
+    p_N_head = &proc[new_head]; 
+  } while (cas(&p_O_head->next_proc, old_head, p_N_head));
 }
 
 int
 set_cpu(int cpu_num){
   struct proc *p = myproc();
-  struct cpu *c = &cpus[cpu_num]; // check if need to write &cpus[]
+  struct cpu *c = &cpus[cpu_num]; 
   int old_last;
   p->running_cpu = cpu_num;
-  do {
-    old_last = c->last_proc;
-  } while(cas(&c->last_proc, old_last, p->pid));
-  &proc[old_last].next_proc = p->pid; // check if need to write &proc[]
+  old_last = c->last_proc;
+  if(!cas(&c->last_proc, old_last, p->pid)){
+    &proc[old_last].next_proc = p->pid; 
+    yield();
+    return cpu_num;
+  }
+  return -1;
+}
+
+int get_cpu(){
+  return cpuid();
+}
+
+int
+add_to_last(int first, int new_last){
+  if (first != -1)
+  {  
+    struct proc *pred = &proc[first];
+    int last_index;
+    do
+    {
+      acquire(&pred->lock);
+      last_index = pred->next_proc;
+      release(&pred->lock);
+      pred = &proc[last_index];
+    } while (cas(&pred->next_proc, -1, new_last));
+    return new_last;
+  }
+  return -1;
 }
