@@ -110,4 +110,5 @@ struct proc {
 
   int running_cpu;             // The cpu id that runs the process
   int next_proc;               // Next process to run
+  int proc_index;              // Process index in proc[]
 };
