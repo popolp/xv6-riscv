@@ -500,10 +500,6 @@ scheduler(void)
       acquire(&link_lock[cpu_id]);
       proc_to_run = cpus_ready[cpu_id];
       
-      // do {
-      //   proc_to_run = cpus_ready[cpu_id];
-      // }while (!remove_proc_from_list(&cpus_ready[cpu_id], proc_to_run, &link_lock[cpu_id]) && proc_to_run > -1);
-      
       if (proc_to_run != -1)
       {
         p = &proc[proc_to_run];
@@ -529,7 +525,6 @@ scheduler(void)
         if (p->state == RUNNABLE)
         {        
           p->state = RUNNING;
-         // remove_proc_from_list(&cpus_ready[cpu_id], p->proc_index, &link_lock[cpu_id]);
 
           c->proc = p;
           swtch(&c->context, &p->context);
@@ -648,7 +643,7 @@ wakeup(void *chan)
   if (next_sleeping != -1){
     next_proc = next_sleeping; 
     curr = &proc[next_proc];
-    acquire(&curr->list_lock);
+    acquire(&curr->list_lock); 
     acquire(&curr->lock);
   }
 
@@ -674,7 +669,6 @@ wakeup(void *chan)
       curr->next_proc = -1;  
       curr->running_cpu = least_used_cpu(curr->running_cpu);
       add_to_last(&cpus_ready[curr->running_cpu], curr->proc_index, &link_lock[curr->running_cpu]);    
-         
     }
     else removed = 0;
 
@@ -927,7 +921,7 @@ steal_process(int cpu_id){
       {
         p = &proc[steal_proc];
         acquire(&p->list_lock);
-        cpus_ready[cpu] = proc[steal_proc].next_proc;
+        cpus_ready[cpu] = proc[steal_proc].next_proc; 
         p->next_proc = -1;
         p->running_cpu = cpu_id;
         release(&p->list_lock);
