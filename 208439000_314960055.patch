@@ -1,0 +1,590 @@
+diff --git a/208439000_314960055.patch b/208439000_314960055.patch
+deleted file mode 100644
+index a404574..0000000
+Binary files a/208439000_314960055.patch and /dev/null differ
+diff --git a/Makefile b/Makefile
+index 328f9c6..9175a51 100644
+--- a/Makefile
++++ b/Makefile
+@@ -28,7 +28,8 @@ OBJS = \
+   $K/sysfile.o \
+   $K/kernelvec.o \
+   $K/plic.o \
+-  $K/virtio_disk.o
++  $K/virtio_disk.o \
++  $K/cas.o
+ 
+ # riscv64-unknown-elf- or riscv64-linux-gnu-
+ # perhaps in /opt/riscv/bin
+@@ -62,6 +63,7 @@ CFLAGS += -mcmodel=medany
+ CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
+ CFLAGS += -I.
+ CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
++CFLAGS += -D$(BLNCFLG)
+ 
+ # Disable PIE when possible (for Ubuntu 16.10 toolchain)
+ ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]no-pie'),)
+@@ -132,6 +134,7 @@ UPROGS=\
+ 	$U/_grind\
+ 	$U/_wc\
+ 	$U/_zombie\
++	$U/_castest\
+ 
+ fs.img: mkfs/mkfs README $(UPROGS)
+ 	mkfs/mkfs fs.img README $(UPROGS)
+@@ -153,7 +156,11 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
+ 	then echo "-gdb tcp::$(GDBPORT)"; \
+ 	else echo "-s -p $(GDBPORT)"; fi)
+ ifndef CPUS
+-CPUS := 3
++CPUS := 2
++endif
++
++ifndef BLNCFLG
++BLNCFLG := OFF
+ endif
+ 
+ QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
+diff --git a/kernel/cas.S b/kernel/cas.S
+new file mode 100644
+index 0000000..da2fc0e
+--- /dev/null
++++ b/kernel/cas.S
+@@ -0,0 +1,9 @@
++.global cas
++cas:
++    lr.w t0, (a0) # Load original value.
++    bne t0, a1, fail # Doesn’t match, so fail.
++    sc.w a0, a2, (a0) # Try to update.
++    jr ra # Return.
++fail:
++    li a0, 1 # Set return to failure.
++    jr ra # Return.
+\ No newline at end of file
+diff --git a/kernel/proc.c b/kernel/proc.c
+index 22e7ce4..84fb71c 100644
+--- a/kernel/proc.c
++++ b/kernel/proc.c
+@@ -18,6 +18,22 @@ struct spinlock pid_lock;
+ extern void forkret(void);
+ static void freeproc(struct proc *p);
+ 
++extern uint64 cas(volatile void *addr, int expected , int newval);
++
++extern void add_to_last(int *first, int insert_proc, struct spinlock *link);
++extern int remove_proc_from_list(int *first, int remove_proc, struct spinlock *link);
++extern int get_cpu();
++extern int least_used_cpu(int running_cpu);
++extern int steal_process(int cpu_id);
++extern void print_list(int *first);
++
++int next_zombie = -1;
++int next_unused = -1;
++int next_sleeping = -1;
++int cpus_ready[NCPU];
++int cpus_runs[NCPU];
++uint64 cpus_count[NCPU];
++
+ extern char trampoline[]; // trampoline.S
+ 
+ // helps ensure that wakeups of wait()ing
+@@ -26,6 +42,11 @@ extern char trampoline[]; // trampoline.S
+ // must be acquired before any p->lock.
+ struct spinlock wait_lock;
+ 
++struct spinlock link_lock_zombie;
++struct spinlock link_lock_unused;
++struct spinlock link_lock_sleep;
++struct spinlock link_lock[NCPU];
++
+ // Allocate a page for each process's kernel stack.
+ // Map it high in memory, followed by an invalid
+ // guard page.
+@@ -50,9 +71,13 @@ procinit(void)
+   
+   initlock(&pid_lock, "nextpid");
+   initlock(&wait_lock, "wait_lock");
+-  for(p = proc; p < &proc[NPROC]; p++) {
++  int index = 0;
++  for(p = proc; p < &proc[NPROC]; p++, index++) {
+       initlock(&p->lock, "proc");
+       p->kstack = KSTACK((int) (p - proc));
++      p->proc_index = index;
++      p->next_proc = -1;
++      add_to_last(&next_unused, index, &link_lock_unused);
+   }
+ }
+ 
+@@ -88,12 +113,9 @@ myproc(void) {
+ int
+ allocpid() {
+   int pid;
+-  
+-  acquire(&pid_lock);
+-  pid = nextpid;
+-  nextpid = nextpid + 1;
+-  release(&pid_lock);
+-
++  do {
++    pid = nextpid;
++  } while (cas(&nextpid, pid, pid + 1));
+   return pid;
+ }
+ 
+@@ -106,12 +128,22 @@ allocproc(void)
+ {
+   struct proc *p;
+ 
+-  for(p = proc; p < &proc[NPROC]; p++) {
++  int proc_to_init = next_unused;
++  if (proc_to_init > -1){
++    p = &proc[proc_to_init];
+     acquire(&p->lock);
+-    if(p->state == UNUSED) {
+-      goto found;
+-    } else {
++    if (p->state == UNUSED)
++    {
++      if(remove_proc_from_list(&next_unused, proc_to_init, &link_lock_unused))
++        goto found;
++      else {
++        release(&p->lock);
++        return allocproc();
++      }
++    }
++    else {
+       release(&p->lock);
++      return allocproc();
+     }
+   }
+   return 0;
+@@ -164,6 +196,8 @@ freeproc(struct proc *p)
+   p->killed = 0;
+   p->xstate = 0;
+   p->state = UNUSED;
++  remove_proc_from_list(&next_zombie, p->proc_index, &link_lock_zombie);
++  add_to_last(&next_unused, p->proc_index, &link_lock_unused);
+ }
+ 
+ // Create a user page table for a given process,
+@@ -244,6 +278,14 @@ userinit(void)
+ 
+   p->state = RUNNABLE;
+ 
++  for (int i = 0; i < 8; i++)
++  {
++    cpus_ready[i] = -1;
++    cpus_runs[i] = 0;
++    cpus_count[i] = 0;
++  }
++  while (cas(&cpus_ready[0], -1, p->proc_index));
++
+   release(&p->lock);
+ }
+ 
+@@ -313,6 +355,8 @@ fork(void)
+ 
+   acquire(&np->lock);
+   np->state = RUNNABLE;
++  np->running_cpu = least_used_cpu(p->running_cpu);
++  add_to_last(&cpus_ready[np->running_cpu], np->proc_index, &link_lock[np->running_cpu]);
+   release(&np->lock);
+ 
+   return pid;
+@@ -371,6 +415,8 @@ exit(int status)
+   p->xstate = status;
+   p->state = ZOMBIE;
+ 
++  add_to_last(&next_zombie, p->proc_index, &link_lock_zombie);
++
+   release(&wait_lock);
+ 
+   // Jump into the scheduler, never to return.
+@@ -439,27 +485,55 @@ scheduler(void)
+ {
+   struct proc *p;
+   struct cpu *c = mycpu();
++  int proc_to_run;
++  int cpu_id = get_cpu();
+   
++  cpus_runs[cpu_id] = 1;
++
+   c->proc = 0;
+   for(;;){
+     // Avoid deadlock by ensuring that devices can interrupt.
+     intr_on();
+ 
+-    for(p = proc; p < &proc[NPROC]; p++) {
+-      acquire(&p->lock);
+-      if(p->state == RUNNABLE) {
+-        // Switch to chosen process.  It is the process's job
+-        // to release its lock and then reacquire it
+-        // before jumping back to us.
+-        p->state = RUNNING;
+-        c->proc = p;
+-        swtch(&c->context, &p->context);
+-
+-        // Process is done running for now.
+-        // It should have changed its p->state before coming back.
+-        c->proc = 0;
++    if (cpu_id > -1)
++    {    
++      acquire(&link_lock[cpu_id]);
++      proc_to_run = cpus_ready[cpu_id];
++      
++      if (proc_to_run != -1)
++      {
++        p = &proc[proc_to_run];
++        acquire(&p->list_lock);
++        cpus_ready[cpu_id] = p->next_proc;
++        p->next_proc = -1;
++        release(&p->list_lock);
++      }
++      release(&link_lock[cpu_id]);
++
++      if (proc_to_run == -1)
++      {
++        #ifdef ON
++        proc_to_run = steal_process(cpu_id);
++        #endif
++      }
++      
++      if (proc_to_run > -1)
++      { 
++        p = &proc[proc_to_run];
++        acquire(&p->lock);
++
++        if (p->state == RUNNABLE)
++        {        
++          p->state = RUNNING;
++
++          c->proc = p;
++          swtch(&c->context, &p->context);
++          
++          c->proc = 0;
++        }
++        release(&p->lock);
++        
+       }
+-      release(&p->lock);
+     }
+   }
+ }
+@@ -498,6 +572,7 @@ yield(void)
+   struct proc *p = myproc();
+   acquire(&p->lock);
+   p->state = RUNNABLE;
++  add_to_last(&cpus_ready[p->running_cpu], p->proc_index, &link_lock[p->running_cpu]);
+   sched();
+   release(&p->lock);
+ }
+@@ -536,7 +611,7 @@ sleep(void *chan, struct spinlock *lk)
+   // guaranteed that we won't miss any wakeup
+   // (wakeup locks p->lock),
+   // so it's okay to release lk.
+-
++  add_to_last(&next_sleeping, p->proc_index, &link_lock_sleep);
+   acquire(&p->lock);  //DOC: sleeplock1
+   release(lk);
+ 
+@@ -559,17 +634,78 @@ sleep(void *chan, struct spinlock *lk)
+ void
+ wakeup(void *chan)
+ {
+-  struct proc *p;
++  struct proc *curr, *pred, *removed_proc;
++  pred = 0;
++  int removed = 0;
++  int sleepLocked = 1;
++  int next_proc = -1;
++  acquire(&link_lock_sleep);
++  if (next_sleeping != -1){
++    next_proc = next_sleeping; 
++    curr = &proc[next_proc];
++    acquire(&curr->list_lock); 
++    acquire(&curr->lock);
++  }
+ 
+-  for(p = proc; p < &proc[NPROC]; p++) {
+-    if(p != myproc()){
+-      acquire(&p->lock);
+-      if(p->state == SLEEPING && p->chan == chan) {
+-        p->state = RUNNABLE;
++  while (next_proc > -1)
++  {
++    next_proc = curr->next_proc;
++    if(curr->state == SLEEPING && curr->chan == chan) {
++      removed = 1;
++      removed_proc = curr;
++      if (curr->proc_index == next_sleeping)
++      {
++        next_sleeping = next_proc;
+       }
+-      release(&p->lock);
++      else {
++        pred->next_proc = curr->next_proc;
++        if (sleepLocked)
++        {
++          release(&link_lock_sleep);
++          sleepLocked = 0;
++        }        
++      }
++      curr->state = RUNNABLE;
++      curr->next_proc = -1;  
++      curr->running_cpu = least_used_cpu(curr->running_cpu);
++      add_to_last(&cpus_ready[curr->running_cpu], curr->proc_index, &link_lock[curr->running_cpu]);    
++    }
++    else removed = 0;
++
++    if (pred != 0 && !removed)
++    { 
++      release(&pred->lock);
++      release(&pred->list_lock);
+     }
++    if (!removed){
++      pred = curr;
++      if (sleepLocked)
++      {
++        release(&link_lock_sleep);
++        sleepLocked = 0;
++      }
++    }
++      
++    if (next_proc != -1)
++    {
++      curr = &proc[next_proc];
++      acquire(&curr->list_lock);
++      acquire(&curr->lock);
++    }
++    if (removed)
++    {
++      release(&removed_proc->lock);
++      release(&removed_proc->list_lock);
++    }
++
++  }
++
++  if (pred != 0){
++      release(&pred->lock);
++      release(&pred->list_lock);
+   }
++  if(sleepLocked)
++    release(&link_lock_sleep);
+ }
+ 
+ // Kill the process with the given pid.
+@@ -587,9 +723,12 @@ kill(int pid)
+       if(p->state == SLEEPING){
+         // Wake process from sleep().
+         p->state = RUNNABLE;
++        remove_proc_from_list(&next_sleeping, p->proc_index, &link_lock_sleep);
++        release(&p->lock);
++        add_to_last(&cpus_ready[p->running_cpu], p->proc_index, &link_lock[p->running_cpu]);
+       }
+-      release(&p->lock);
+-      return 0;
++     else release(&p->lock);
++    return 0;
+     }
+     release(&p->lock);
+   }
+@@ -654,3 +793,147 @@ procdump(void)
+     printf("\n");
+   }
+ }
++
++void add_to_last(int *first, int insert_proc, struct spinlock *link) {
++
++  acquire(link);
++  if(*first == -1){
++    *first = insert_proc;
++    proc[insert_proc].next_proc = -1;
++    release(link);
++    return;
++  }
++
++  struct proc *curr = &proc[*first];
++  acquire(&curr->list_lock); 
++  release(link);
++  
++  struct proc *pred = curr;
++  while (curr->next_proc != -1) {
++    pred = curr;
++    curr = &proc[curr->next_proc];
++    acquire(&curr->list_lock);
++    release(&pred->list_lock);
++  }
++  curr->next_proc = insert_proc;
++  proc[insert_proc].next_proc = -1;
++  release(&curr->list_lock);
++}
++
++int remove_proc_from_list(int *first, int remove_proc, struct spinlock *link) {
++  struct proc *pred, *curr;
++  acquire(link);
++  if (*first == -1)
++  {
++    release(link);
++    return 0;
++  }
++  curr = &proc[*first];
++  acquire(&curr->list_lock);
++  if (remove_proc == *first)
++  {
++    *first = curr->next_proc;
++    curr->next_proc = -1;
++    release(&curr->list_lock);
++    release(link);
++    return 1;
++  }
++  
++  release(link);
++  pred = curr;
++  curr = &proc[pred->next_proc];
++  acquire(&curr->list_lock);
++  if (remove_proc == curr->proc_index)
++  {
++      pred->next_proc = curr->next_proc;
++      curr->next_proc = -1;
++      release(&pred->list_lock);
++      release(&curr->list_lock);
++    return 1;
++  }
++
++  while (curr->next_proc > -1)
++  {
++    if (remove_proc == curr->next_proc)
++    {
++      curr->next_proc = proc[curr->next_proc].next_proc;      
++      proc[curr->next_proc].next_proc = -1;
++      
++      release(&pred->list_lock);
++      release(&curr->list_lock);
++      return 1;
++    }
++    
++    release(&pred->list_lock);
++    pred = curr;
++    curr = &proc[curr->next_proc];
++    acquire(&curr->list_lock);
++  }
++  release(&pred->list_lock);
++  release(&curr->list_lock);
++  return 0;
++  }
++
++int get_cpu(){
++  int cpu_id = cpuid();
++  if (cpu_id < 0 || cpu_id > NCPU)
++    return -1;
++  return cpu_id;
++}
++
++int
++least_used_cpu(int running_cpu){
++
++  int min_cpu = 0;
++  uint64 min_count = cpus_count[0];
++  #ifdef ON
++  for (int cpu = 1; cpu < NCPU; cpu++)
++  {
++    if (cpus_runs[cpu])
++      if (cpus_count[cpu] < min_count){
++        min_cpu = cpu; 
++        min_count = cpus_count[cpu];
++      }
++  }
++  #else 
++  min_cpu = running_cpu;
++  min_count = cpus_count[min_cpu];
++  #endif
++  do
++  {
++    min_count = cpus_count[min_cpu];
++  } while (cas(&cpus_count[min_cpu], min_count, min_count + 1));
++  return min_cpu;
++}
++
++int
++steal_process(int cpu_id){
++  int steal_proc = -1;
++  struct proc *p;
++  uint64 count;
++  for (int cpu = 0; cpu < NCPU; cpu++)
++  {
++    if (cpu != cpu_id)
++    {
++      acquire(&link_lock[cpu]);
++      steal_proc = cpus_ready[cpu];
++      if (steal_proc != -1)
++      {
++        p = &proc[steal_proc];
++        acquire(&p->list_lock);
++        cpus_ready[cpu] = proc[steal_proc].next_proc; 
++        p->next_proc = -1;
++        p->running_cpu = cpu_id;
++        release(&p->list_lock);
++        release(&link_lock[cpu]);
++        do
++        {
++          count = cpus_count[cpu_id];
++        } while (cas(&cpus_count[cpu_id], count, count + 1));
++        return steal_proc;
++      }
++      release(&link_lock[cpu]);
++    }
++  }
++  return steal_proc;
++}
+\ No newline at end of file
+diff --git a/kernel/proc.h b/kernel/proc.h
+index f6ca8b7..476e96b 100644
+--- a/kernel/proc.h
++++ b/kernel/proc.h
+@@ -85,6 +85,7 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+ // Per-process state
+ struct proc {
+   struct spinlock lock;
++  struct spinlock list_lock;
+ 
+   // p->lock must be held when using these:
+   enum procstate state;        // Process state
+@@ -105,4 +106,8 @@ struct proc {
+   struct file *ofile[NOFILE];  // Open files
+   struct inode *cwd;           // Current directory
+   char name[16];               // Process name (debugging)
++  
++  int running_cpu;             // The cpu id that runs the process
++  int next_proc;               // Next process to run
++  int proc_index;              // Process index in proc[]
+ };
+diff --git a/user/castest.c b/user/castest.c
+new file mode 100644
+index 0000000..586a1a6
+--- /dev/null
++++ b/user/castest.c
+@@ -0,0 +1,23 @@
++#include "kernel/types.h"
++#include "kernel/stat.h"
++#include "user/user.h"
++#include "kernel/fs.h"
++#include "kernel/fcntl.h"
++
++
++void main() {
++    for (int i = 0; i < 5; i++) {
++        int pid = fork();
++        if (pid != 0) {
++            printf("%d\n", pid);
++            int pid2 = fork();
++            if (pid2 != 0) {
++                printf("%d\n", pid2);
++                exit(0);
++            }
++            exit(0);
++        }
++    }
++    while(wait(0) > 0);
++    exit(0);
++}
+\ No newline at end of file
