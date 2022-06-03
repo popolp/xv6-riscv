@@ -7,3 +7,4 @@ cas:
 fail:
     li a0, 1 # Set return to failure.
     jr ra # Return.
+    
