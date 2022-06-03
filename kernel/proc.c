@@ -809,13 +809,7 @@ void add_to_last(int *first, int insert_proc, struct spinlock *link) {
   release(link);
   
   struct proc *pred = curr;
-  while (curr->next_proc != -1) {
-    if (curr->proc_index == insert_proc)
-    {
-      release(&curr->list_lock);
-      return;
-    }
-    
+  while (curr->next_proc != -1) {    
     pred = curr;
     curr = &proc[curr->next_proc];
     acquire(&curr->list_lock);
