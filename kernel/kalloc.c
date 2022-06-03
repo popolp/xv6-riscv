@@ -9,10 +9,16 @@
 #include "riscv.h"
 #include "defs.h"
 
+#define NUM_PYS_PAGES ((PHYSTOP-KERNBASE) / PGSIZE)
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
+
+extern uint64 cas(volatile void *addr, int expected , int newval);
+
+int page_refs[NUM_PYS_PAGES];
 
 struct run {
   struct run *next;
@@ -23,10 +29,45 @@ struct {
   struct run *freelist;
 } kmem;
 
+int
+ref_index_from_PA(uint64 pa){
+  return ((pa - KERNBASE) / PGSIZE);
+}
+
+// int 
+// reference_find(uint64 pa)
+// {
+//   return page_refs[ref_index_from_PA(pa)];
+// }
+
+int
+add_refs(uint64 pa)
+{
+  int ref;
+  int ref_index = ref_index_from_PA(pa);
+  do
+  {
+    ref = page_refs[ref_index];
+  } while (cas(&page_refs[ref_index], ref, ref + 1));
+  return ref;
+}
+
+int
+remove_ref(uint64 pa)
+{
+  int ref;  
+  int ref_index = ref_index_from_PA(pa);
+  do {
+    ref = page_refs[ref_index];
+  } while (cas(&page_refs[ref_index], ref, ref - 1));
+  return ref;
+}
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  memset(page_refs, 0, sizeof(int)*NUM_PYS_PAGES);
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -51,6 +92,10 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  if (remove_ref((uint64)pa) > 0)
+    return;
+
+  page_refs[ref_index_from_PA((uint64)pa)] = 0;
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
@@ -72,11 +117,16 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+
+  if(r) {
+    page_refs[ref_index_from_PA((uint64)r)] = 1;
     kmem.freelist = r->next;
+  }
   release(&kmem.lock);
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
 }
+
+
