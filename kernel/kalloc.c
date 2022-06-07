@@ -19,7 +19,6 @@ extern char end[]; // first address after kernel.
 extern uint64 cas(volatile void *addr, int expected , int newval);
 
 int page_refs[NUM_PYS_PAGES];
-struct spinlock r_lock;
 
 struct run {
   struct run *next;
@@ -68,7 +67,6 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  initlock(&r_lock, "refereces");
   memset(page_refs, 0, sizeof(int)*NUM_PYS_PAGES);
   freerange(end, (void*)PHYSTOP);
 }
