@@ -400,7 +400,7 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
-  bn -= NINDIRECT;
+    bn -= NINDIRECT;
 
   if(bn < NDOUBLY_INDIRECT){
     // Load double indirect block, allocating if necessary.
@@ -416,7 +416,6 @@ bmap(struct inode *ip, uint bn)
       log_write(bp);
     }
     brelse(bp);
-
     // now find disk block.
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
@@ -425,7 +424,9 @@ bmap(struct inode *ip, uint bn)
       a[pos] = addr = balloc(ip->dev);
       log_write(bp);
     }
-
+    brelse(bp);
+    return addr;
+  }
   panic("bmap: out of range");
 }
 

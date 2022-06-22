@@ -165,30 +165,30 @@ bad:
   return -1;
 }
 
-uint64
-sys_symlink(void)
-{
-  char target[MAXPATH], path[MAXARG];
-  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0){
-    return -1;
-  }
+// uint64
+// sys_symlink(void)
+// {
+//   char target[MAXPATH], path[MAXARG];
+//   if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0){
+//     return -1;
+//   }
 
-  begin_op(ROOTDEV);
-  struct inode *ip = create(path, T_SYMLNK, 0, 0);
-  if(ip == 0){
-    end_op(ROOTDEV);
-    return -1;
-  }
+//   begin_op(ROOTDEV);
+//   struct inode *ip = create(path, T_SYMLNK, 0, 0);
+//   if(ip == 0){
+//     end_op(ROOTDEV);
+//     return -1;
+//   }
 
-  int len = strlen(target);
-  writei(ip, 0, (uint64)&len, 0, sizeof(int));
-  writei(ip, 0, (uint64)target, sizeof(int), len + 1);
-  iupdate(ip);
-  iunlockput(ip);
+//   int len = strlen(target);
+//   writei(ip, 0, (uint64)&len, 0, sizeof(int));
+//   writei(ip, 0, (uint64)target, sizeof(int), len + 1);
+//   iupdate(ip);
+//   iunlockput(ip);
 
-  end_op(ROOTDEV);
-  return 0;
-}
+//   end_op(ROOTDEV);
+//   return 0;
+// }
 
 // Is the directory dp empty except for "." and ".." ?
 static int

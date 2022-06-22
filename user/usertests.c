@@ -436,6 +436,58 @@ iputtest(char *s)
   }
 }
 
+// void
+// chdir_sym_link(char *s)
+// {
+//   // create dir
+//   if(mkdir("dir") < 0){
+//     printf("%s: mkdir failed\n", s);
+//     exit(1);
+//   }
+
+//   // create symbolic dir for dir
+//   if(symlink("dir", "sym_dir") < 0){
+//     printf("%s: symlink iputdir failed\n", s);
+//     exit(1);
+//   }
+
+//   // make sure the symbolic dir works
+//   if(chdir("sym_dir") < 0){
+//     printf("%s: chdir sym_dir failed\n", s);
+//     exit(1);
+//   }
+
+//   // return to root
+//   if(chdir("/") < 0){
+//     printf("%s: chdir / failed\n", s);
+//     exit(1);
+//   }
+
+//   // make sure the original dir works
+//   if(chdir("dir") < 0){
+//     printf("%s: chdir dir failed\n", s);
+//     exit(1);
+//   }
+
+//   // return to root
+//   if(chdir("/") < 0){
+//     printf("%s: chdir  failed\n", s);
+//     exit(1);
+//   }
+
+//   // unlink the original dir
+//   if(unlink("dir") < 0){
+//     printf("%s: unlink dir failed\n", s);
+//     exit(1);
+//   }
+
+//   // unlink the symbolic dir
+//   if(unlink("sym_dir") < 0){
+//     printf("%s: unlink sym_dir failed\n", s);
+//     exit(1);
+//   }
+// }
+
 // does exit() call iput(p->cwd) in a transaction?
 void
 exitiputtest(char *s)
@@ -2772,6 +2824,207 @@ countfree()
   return n;
 }
 
+// void
+// test_readlink(char *s)
+// {
+//   // create a symlink to echo
+//   if(symlink("echo", "sym_echo") < 0){
+//     printf("%s: symlink echo failed\n", s);
+//     exit(1);
+//   }
+
+//   // read the symlink
+//   char buf[MAXPATH]; 
+//   if(readlink("sym_echo", buf, MAXPATH)){
+//     printf("%s: error: readlink failed!\n", s);
+//     exit(1);
+//   }
+
+//   // vaildate the symlink
+//   if(strcmp(buf, "echo") != 0){
+//     printf("%s: error: test_readlink failed!\n", s);
+//     exit(1);
+//   }
+
+//   // remove the symlink
+//   if(unlink("sym_echo") < 0){
+//     printf("%s: unlink sym_echo failed!\n", s);
+//     exit(1);
+//   }
+// }
+
+// void
+// test_sym_unlink(char *s){
+//   // create dir
+//   if(mkdir("dir") < 0){
+//     printf("%s: mkdir dir failed\n", s);
+//     exit(1);
+//   }
+  
+//   // create symbolic dir for dir
+//   if (symlink("dir", "sym_dir") < 0)
+//   {
+//     printf("%s: symlink dir failed\n", s);
+//     exit(1);
+//   }
+
+//   // unlink symbolic dir
+//   if (unlink("sym_dir") < 0)
+//   {
+//     printf("%s: unlink sym_dir failed\n", s);
+//     exit(1);
+//   }
+
+//   // make sure the symbolic dir was unlinked (chdir(sym_dir) should fail)
+//   if(chdir("sym_dir") >= 0){
+//     printf("%s: chdir symbol dir should have failed\n", s);
+//     exit(1);
+//   }
+
+//   // make sure the original dir is still linked
+//   if(chdir("dir") < 0){
+//     printf("%s: chdir dir failed\n", s);
+//     exit(1);
+//   }
+
+//   // return to root
+//   if(chdir("/") < 0){
+//     printf("%s: chdir / failed\n", s);
+//     exit(1);
+//   }
+
+//   // unlink original dir
+//   if(unlink("dir") < 0){
+//     printf("%s: unlink dir failed\n", s);
+//     exit(1);
+//   }
+
+//   // make sure the original dir was unlinked (chdir(sym_dir) should fail)
+//   if(chdir("dir") >= 0){
+//     printf("%s: chdir dir should have failed\n", s);
+//     exit(1);
+//   }
+// }
+
+void
+writeten(char *s)
+{
+  int i, fd, n;
+  int TEST_FILE_SIZE = 10000;
+
+  fd = open("writeten", O_CREATE|O_RDWR);
+  if(fd < 0){
+    printf("%s: error: create writeten failed!\n", s);
+    exit(1);
+  }
+
+  for(i = 0; i < NDIRECT; i++){
+    ((int*)buf)[0] = i;
+    if(write(fd, buf, BSIZE) != BSIZE){
+      printf("%s: error: write 12KB to file failed\n", s, i);
+      exit(1);
+    }
+  }
+  printf("Finished writing 12KB (direct)\n");
+
+  for (; i < NDIRECT + NINDIRECT; i++){
+    ((int*)buf)[0] = i;
+    if(write(fd, buf, BSIZE) != BSIZE){
+      printf("%s: error: write 268KB to file failed\n", s, i);
+      exit(1);
+    }
+  }
+  printf("Finished writing 268KB (single direct)\n");
+
+  for(; i < TEST_FILE_SIZE; i++){
+    ((int*)buf)[0] = i;
+    if(write(fd, buf, BSIZE) != BSIZE){
+      printf("%s: error: write 10MB to file failed\n", s, i);
+      exit(1);
+    }
+  }
+  printf("Finished writing 10MB (direct)\n");
+
+  close(fd);
+
+  fd = open("writeten", O_RDONLY);
+  if(fd < 0){
+    printf("%s: error: open writeten failed!\n", s);
+    exit(1);
+  }
+
+  n = 0;
+  for(;;){
+    i = read(fd, buf, BSIZE);
+    if(i == 0){
+      if(n == TEST_FILE_SIZE - 1){
+        printf("%s: read only %d blocks from big", s, n);
+        exit(1);
+      }
+      break;
+    } else if(i != BSIZE){
+      printf("%s: read failed %d\n", s, i);
+      exit(1);
+    }
+    if(((int*)buf)[0] != n){
+      printf("%s: read content of block %d is %d\n", s,
+             n, ((int*)buf)[0]);
+      exit(1);
+    }
+    n++;
+  }
+  close(fd);
+
+  if(unlink("writeten") < 0){
+    printf("%s: unlink writeten failed\n", s);
+    exit(1);
+  }
+}
+
+// void
+// unlink_empty_dir(char *s){
+//   if(mkdir("empty_dir") < 0){
+//     printf("%s: mkdir empty_dir failed\n", s);
+//     exit(1);
+//   }
+//   if(unlink("empty_dir") < 0){
+//     printf("%s: unlink empty_dir failed\n", s);
+//     exit(1);
+//   }
+// }
+
+// void
+// unlink_dir(char *s){
+//   if(mkdir("dir") < 0){
+//     printf("%s: mkdir dir failed\n", s);
+//     exit(1);
+//   }
+//   if(chdir("dir") < 0){
+//     printf("%s: chdir dir failed\n", s);
+//     exit(1);
+//   }
+//   if(mkdir("anotherdir") < 0){
+//     printf("%s: mkdir anotherdir failed\n", s);
+//     exit(1);
+//   }
+//   if(chdir("/") < 0){
+//     printf("%s: chdir / failed\n", s);
+//     exit(1);
+//   }
+//   if(unlink("dir") == 0){
+//     printf("%s: unlink dir should fail since dir isn't empty\n", s);
+//     exit(1);
+//   }
+//   if(unlink("dir/anotherdir") < 0){
+//     printf("%s: unlink anotherdir failed\n", s);
+//     exit(1);
+//   }
+//   if(unlink("dir") < 0){
+//     printf("%s: unlink dir failed\n", s);
+//     exit(1);
+//   }
+// }
+
 // run each test in its own process. run returns 1 if child's exit()
 // indicates success.
 int
@@ -2818,69 +3071,79 @@ main(int argc, char *argv[])
     void (*f)(char *);
     char *s;
   } tests[] = {
-    {MAXVAplus, "MAXVAplus"},
-    {manywrites, "manywrites"},
-    {execout, "execout"},
-    {copyin, "copyin"},
-    {copyout, "copyout"},
-    {copyinstr1, "copyinstr1"},
-    {copyinstr2, "copyinstr2"},
-    {copyinstr3, "copyinstr3"},
-    {rwsbrk, "rwsbrk" },
-    {truncate1, "truncate1"},
-    {truncate2, "truncate2"},
-    {truncate3, "truncate3"},
-    {reparent2, "reparent2"},
-    {pgbug, "pgbug" },
-    {sbrkbugs, "sbrkbugs" },
-    // {badwrite, "badwrite" },
-    {badarg, "badarg" },
-    {reparent, "reparent" },
-    {twochildren, "twochildren"},
-    {forkfork, "forkfork"},
-    {forkforkfork, "forkforkfork"},
-    {argptest, "argptest"},
-    {createdelete, "createdelete"},
-    {linkunlink, "linkunlink"},
-    {linktest, "linktest"},
-    {unlinkread, "unlinkread"},
-    {concreate, "concreate"},
-    {subdir, "subdir"},
-    {fourfiles, "fourfiles"},
-    {sharedfd, "sharedfd"},
-    {dirtest, "dirtest"},
-    {exectest, "exectest"},
-    {bigargtest, "bigargtest"},
-    {bigwrite, "bigwrite"},
-    {bsstest, "bsstest"},
-    {sbrkbasic, "sbrkbasic"},
-    {sbrkmuch, "sbrkmuch"},
-    {kernmem, "kernmem"},
-    {sbrkfail, "sbrkfail"},
-    {sbrkarg, "sbrkarg"},
-    {sbrklast, "sbrklast"},
-    {sbrk8000, "sbrk8000"},
-    {validatetest, "validatetest"},
-    {stacktest, "stacktest"},
-    {opentest, "opentest"},
-    {writetest, "writetest"},
-    {writebig, "writebig"},
-    {createtest, "createtest"},
-    {openiputtest, "openiput"},
-    {exitiputtest, "exitiput"},
-    {iputtest, "iput"},
-    {mem, "mem"},
-    {pipe1, "pipe1"},
-    {killstatus, "killstatus"},
-    {preempt, "preempt"},
-    {exitwait, "exitwait"},
-    {rmdot, "rmdot"},
-    {fourteen, "fourteen"},
-    {bigfile, "bigfile"},
-    {dirfile, "dirfile"},
-    {iref, "iref"},
-    {forktest, "forktest"},
-    {bigdir, "bigdir"}, // slow
+    // {MAXVAplus, "MAXVAplus"},
+    // {manywrites, "manywrites"},
+    // {execout, "execout"},
+    // {copyin, "copyin"},
+    // {copyout, "copyout"},
+    // {copyinstr1, "copyinstr1"},
+    // {copyinstr2, "copyinstr2"},
+    // {copyinstr3, "copyinstr3"},
+    // {rwsbrk, "rwsbrk" },
+    // {truncate1, "truncate1"},
+    // {truncate2, "truncate2"},
+    // {truncate3, "truncate3"},
+    // {reparent2, "reparent2"},
+    // {pgbug, "pgbug" },
+    // {sbrkbugs, "sbrkbugs" },
+    // // {badwrite, "badwrite" },
+    // {badarg, "badarg" },
+    // {reparent, "reparent" },
+    // {twochildren, "twochildren"},
+    // {forkfork, "forkfork"},
+    // {forkforkfork, "forkforkfork"},
+    // {argptest, "argptest"},
+    // {createdelete, "createdelete"},
+    // {linkunlink, "linkunlink"},
+    // {linktest, "linktest"},
+    // {unlinkread, "unlinkread"},
+    // {concreate, "concreate"},
+    // {subdir, "subdir"},
+    // {fourfiles, "fourfiles"},
+    // {sharedfd, "sharedfd"},
+    // {dirtest, "dirtest"},
+    // {exectest, "exectest"},
+    // {bigargtest, "bigargtest"},
+    // {bigwrite, "bigwrite"},
+    // {bsstest, "bsstest"},
+    // {sbrkbasic, "sbrkbasic"},
+    // {sbrkmuch, "sbrkmuch"},
+    // {kernmem, "kernmem"},
+    // {sbrkfail, "sbrkfail"},
+    // {sbrkarg, "sbrkarg"},
+    // {sbrklast, "sbrklast"},
+    // {sbrk8000, "sbrk8000"},
+    // {validatetest, "validatetest"},
+    // {stacktest, "stacktest"},
+    // {opentest, "opentest"},
+    // {writetest, "writetest"},
+    // removed this test, too big and takes too long: {writebig, "writebig"},
+    // Tests part 1 of the assignment
+    {writeten, "writeten"},
+    // ***************************** //
+    // Tests part 2 of the assignment
+    // {unlink_empty_dir, "unlink_empty_dir"},
+    // {unlink_dir, "unlink_dir"},
+    // {test_readlink, "test_readlink"},
+    // {chdir_sym_link, "chdir_sym_link"},
+    // {test_sym_unlink, "test_sym_unlink"},
+    // ***************************** //
+    // {createtest, "createtest"},
+    // {openiputtest, "openiput"},
+    // {exitiputtest, "exitiput"},
+    // {iputtest, "iput"},
+    // {mem, "mem"},
+    // {pipe1, "pipe1"},
+    // {killstatus, "killstatus"},
+    // {preempt, "preempt"},
+    // {exitwait, "exitwait"},
+    // {rmdot, "rmdot"},
+    // {fourteen, "fourteen"},
+    // {bigfile, "bigfile"},
+    // {dirfile, "dirfile"},
+    // {iref, "iref"},
+    // {forktest, "forktest"},
+    // {bigdir, "bigdir"}, // slow
     { 0, 0},
   };
 
