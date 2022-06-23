@@ -310,6 +310,11 @@ sys_symlink(void)
 }
 
 uint64
+sys_readlink(void)
+{}
+
+
+uint64
 sys_open(void)
 {
   char path[MAXPATH];
@@ -343,29 +348,29 @@ sys_open(void)
   }
 
   if ((ip->type == T_SYMLNK) && !(omode & O_NOSYM)){
-    int count = 0;
-  while (ip->type == T_SYMLNK && count < 10) {
-    int len = 0;
-    readi(ip, 0, (uint64)&len, 0, sizeof(int));
+      int count = 0;
+    while (ip->type == T_SYMLNK && count < 10) {
+      int len = 0;
+      readi(ip, 0, (uint64)&len, 0, sizeof(int));
 
-    if(len > MAXPATH)
-      panic("open: corrupted symlink inode");
+      if(len > MAXPATH)
+        panic("open: corrupted symlink inode");
 
-    readi(ip, 0, (uint64)path, sizeof(int), len + 1);
-    iunlockput(ip);
-    if((ip = namei(path)) == 0){
+      readi(ip, 0, (uint64)path, sizeof(int), len + 1);
+      iunlockput(ip);
+      if((ip = namei(path)) == 0){
+        end_op();
+        return -1;
+      }
+      ilock(ip);
+      count++;
+    }
+    if (count >= 10) {
+      printf("We got a cycle!\n");
+      iunlockput(ip);
       end_op();
       return -1;
     }
-    ilock(ip);
-    count++;
-  }
-  if (count >= 10) {
-    printf("We got a cycle!\n");
-    iunlockput(ip);
-    end_op();
-    return -1;
-  }
   }
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
