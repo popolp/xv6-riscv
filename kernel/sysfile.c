@@ -311,7 +311,9 @@ sys_symlink(void)
 
 uint64
 sys_readlink(void)
-{}
+{
+  
+}
 
 
 uint64
