@@ -312,9 +312,33 @@ sys_symlink(void)
 uint64
 sys_readlink(void)
 {
-  
-}
+  char pathname[MAXPATH], buf[MAXPATH];
+  int bufsize;
+  int fd, len;
 
+  if(argstr(0, pathname, MAXPATH) < 0 || argstr(1, buf, MAXPATH) < 0 || argstr(2, bufsize, MAXPATH) < 0)
+    return -1;
+  
+  begin_op();
+  if (fd = open(pathname, O_RDONLY) < 0){
+    end_op();
+    return -1;
+  }
+
+  if(readi(len, 0, (uint64)&fd, 0, sizeof(int)) != sizeof(int)){
+    end_op();
+    return -1;
+  }
+
+  if(len > bufsize){
+    end_op();
+    return -1;
+  }
+
+  writei(buf, 0, (uint64)&fd, sizeof(int), len + 1);
+  end_op();
+  return 0;
+}
 
 uint64
 sys_open(void)
@@ -350,13 +374,12 @@ sys_open(void)
   }
 
   if ((ip->type == T_SYMLNK) && !(omode & O_NOSYM)){
-      int count = 0;
-    while (ip->type == T_SYMLNK && count < 10) {
+    while (ip->type == T_SYMLNK) {
       int len = 0;
       readi(ip, 0, (uint64)&len, 0, sizeof(int));
 
       if(len > MAXPATH)
-        panic("open: corrupted symlink inode");
+        panic("unable to open, maxpath");
 
       readi(ip, 0, (uint64)path, sizeof(int), len + 1);
       iunlockput(ip);
@@ -365,13 +388,6 @@ sys_open(void)
         return -1;
       }
       ilock(ip);
-      count++;
-    }
-    if (count >= 10) {
-      printf("We got a cycle!\n");
-      iunlockput(ip);
-      end_op();
-      return -1;
     }
   }
 

@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "ostream": "c"
+        "ostream": "c",
+        "__config": "c",
+        "locale": "c"
     }
 }
