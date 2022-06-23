@@ -165,30 +165,6 @@ bad:
   return -1;
 }
 
-// uint64
-// sys_symlink(void)
-// {
-//   char target[MAXPATH], path[MAXARG];
-//   if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0){
-//     return -1;
-//   }
-
-//   begin_op(ROOTDEV);
-//   struct inode *ip = create(path, T_SYMLNK, 0, 0);
-//   if(ip == 0){
-//     end_op(ROOTDEV);
-//     return -1;
-//   }
-
-//   int len = strlen(target);
-//   writei(ip, 0, (uint64)&len, 0, sizeof(int));
-//   writei(ip, 0, (uint64)target, sizeof(int), len + 1);
-//   iupdate(ip);
-//   iunlockput(ip);
-
-//   end_op(ROOTDEV);
-//   return 0;
-// }
 
 // Is the directory dp empty except for "." and ".." ?
 static int
@@ -277,7 +253,7 @@ create(char *path, short type, short major, short minor)
   if((ip = dirlookup(dp, name, 0)) != 0){
     iunlockput(dp);
     ilock(ip);
-    if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
+    if((type = T_SYMLNK) || (type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE)))
       return ip;
     iunlockput(ip);
     return 0;
@@ -306,6 +282,31 @@ create(char *path, short type, short major, short minor)
   iunlockput(dp);
 
   return ip;
+}
+
+uint64
+sys_symlink(void)
+{
+  char oldpath[MAXPATH], newpath[MAXPATH];
+  struct inode *ip;
+
+  if(argstr(0, oldpath, MAXPATH) < 0 || argstr(1, newpath, MAXPATH) < 0)
+    return -1;
+
+  begin_op();
+  if((ip = create(newpath, T_SYMLNK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+
+  int len = strlen(oldpath);
+  writei(ip, 0, (uint64)&len, 0, sizeof(int));
+  writei(ip, 0, (uint64)oldpath, sizeof(int), len + 1);
+  iupdate(ip);
+  iunlockput(ip);
+
+  end_op();
+  return 0;
 }
 
 uint64
@@ -339,6 +340,32 @@ sys_open(void)
       end_op();
       return -1;
     }
+  }
+
+  if ((ip->type == T_SYMLNK) && !(omode & O_NOSYM)){
+    int count = 0;
+  while (ip->type == T_SYMLNK && count < 10) {
+    int len = 0;
+    readi(ip, 0, (uint64)&len, 0, sizeof(int));
+
+    if(len > MAXPATH)
+      panic("open: corrupted symlink inode");
+
+    readi(ip, 0, (uint64)path, sizeof(int), len + 1);
+    iunlockput(ip);
+    if((ip = namei(path)) == 0){
+      end_op();
+      return -1;
+    }
+    ilock(ip);
+    count++;
+  }
+  if (count >= 10) {
+    printf("We got a cycle!\n");
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
   }
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
