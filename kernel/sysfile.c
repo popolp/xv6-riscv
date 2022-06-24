@@ -16,6 +16,8 @@
 #include "file.h"
 #include "fcntl.h"
 
+#define MAX_DEREFERENCE 31
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -126,7 +128,7 @@ sys_link(void)
     return -1;
 
   begin_op();
-  if((ip = namei(old)) == 0){
+  if((ip = namei(old)) != 0){
     end_op();
     return -1;
   }
@@ -288,25 +290,11 @@ uint64
 sys_symlink(void)
 {
   char oldpath[MAXPATH], newpath[MAXPATH];
-  struct inode *ip;
 
   if(argstr(0, oldpath, MAXPATH) < 0 || argstr(1, newpath, MAXPATH) < 0)
     return -1;
 
-  begin_op();
-  if((ip = create(newpath, T_SYMLNK, 0, 0)) == 0){
-    end_op();
-    return -1;
-  }
-
-  int len = strlen(oldpath);
-  writei(ip, 0, (uint64)&len, 0, sizeof(int));
-  writei(ip, 0, (uint64)oldpath, sizeof(int), len + 1);
-  iupdate(ip);
-  iunlockput(ip);
-
-  end_op();
-  return 0;
+  return symlink(oldpath, newpath);
 }
 
 uint64
@@ -314,28 +302,37 @@ sys_readlink(void)
 {
   char pathname[MAXPATH], buf[MAXPATH];
   int bufsize;
-  int fd, len;
+  int len = 0;
+  struct inode *ip;
 
-  if(argstr(0, pathname, MAXPATH) < 0 || argstr(1, buf, MAXPATH) < 0 || argstr(2, bufsize, MAXPATH) < 0)
+  if(argstr(0, pathname, MAXPATH) < 0 || argstr(1, buf, MAXPATH) < 0 || argint(2, &bufsize) < 0)
     return -1;
   
   begin_op();
-  if (fd = open(pathname, O_RDONLY) < 0){
+  if((ip = namei(pathname)) == 0){
+      end_op();
+      return -1;
+  }
+  ilock(ip);
+
+  if(ip->type != T_SYMLNK){
+    iunlock(ip);
     end_op();
     return -1;
   }
 
-  if(readi(len, 0, (uint64)&fd, 0, sizeof(int)) != sizeof(int)){
-    end_op();
-    return -1;
-  }
+  readi(ip, 0, (uint64)&len, 0, sizeof(int));
 
   if(len > bufsize){
+    iunlock(ip);
     end_op();
     return -1;
   }
 
-  writei(buf, 0, (uint64)&fd, sizeof(int), len + 1);
+  readi(ip, 1, (uint64)buf, sizeof(int), len + 1);
+
+  iunlockput(ip);
+  
   end_op();
   return 0;
 }

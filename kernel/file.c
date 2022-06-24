@@ -180,3 +180,74 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+struct inode*
+create_sym(char *path, short type, short major, short minor)
+{
+  struct inode *ip, *dp;
+  char name[DIRSIZ];
+
+  if((dp = nameiparent(path, name)) == 0)
+    return 0;
+
+  ilock(dp);
+
+  if((ip = dirlookup(dp, name, 0)) != 0){
+    iunlockput(dp);
+    ilock(ip);
+    if((type = T_SYMLNK) || (type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE)))
+      return ip;
+    iunlockput(ip);
+    return 0;
+  }
+
+  if((ip = ialloc(dp->dev, type)) == 0)
+    panic("create: ialloc");
+
+  ilock(ip);
+  ip->major = major;
+  ip->minor = minor;
+  ip->nlink = 1;
+  iupdate(ip);
+
+  if(type == T_DIR){  // Create . and .. entries.
+    dp->nlink++;  // for ".."
+    iupdate(dp);
+    // No ip->nlink++ for ".": avoid cyclic ref count.
+    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
+      panic("create dots");
+  }
+
+  if(dirlink(dp, name, ip->inum) < 0)
+    panic("create: dirlink");
+
+  iunlockput(dp);
+
+  return ip;
+}
+
+int
+symlink(char *oldpath, char *newpath)
+{
+  struct inode *ip;
+
+  begin_op();
+
+  if((ip = namei(newpath)) != 0){
+    end_op();
+    return -1;
+  }
+
+  if((ip = create_sym(newpath, T_SYMLNK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+
+  int len = strlen(oldpath);
+  writei(ip, 0, (uint64)&len, 0, sizeof(int));
+  writei(ip, 0, (uint64)oldpath, sizeof(int), len + 1);
+  iupdate(ip);
+  iunlockput(ip);
+
+  end_op();
+  return 0;
+}

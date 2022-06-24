@@ -1,7 +1,7 @@
 #define T_DIR     1   // Directory
 #define T_FILE    2   // File
 #define T_DEVICE  3   // Device
-#define T_SYMLNK  3   // symbolic link
+#define T_SYMLNK  4   // symbolic link
 
 struct stat {
   int dev;     // File system's disk device
