@@ -300,23 +300,24 @@ sys_symlink(void)
 uint64
 sys_readlink(void)
 {
-  char pathname[MAXPATH], buf[MAXPATH];
+  char pathname[MAXPATH];
+  uint64 buf;
   int bufsize;
   int len = 0;
   struct inode *ip;
 
-  if(argstr(0, pathname, MAXPATH) < 0 || argstr(1, buf, MAXPATH) < 0 || argint(2, &bufsize) < 0)
+  if(argstr(0, pathname, MAXPATH) < 0 || argaddr(1, &buf) < 0 || argint(2, &bufsize) < 0)
     return -1;
   
   begin_op();
   if((ip = namei(pathname)) == 0){
-      end_op();
-      return -1;
+    end_op();
+    return -1;
   }
   ilock(ip);
 
   if(ip->type != T_SYMLNK){
-    iunlock(ip);
+    iunlockput(ip);
     end_op();
     return -1;
   }
@@ -324,7 +325,7 @@ sys_readlink(void)
   readi(ip, 0, (uint64)&len, 0, sizeof(int));
 
   if(len > bufsize){
-    iunlock(ip);
+    iunlockput(ip);
     end_op();
     return -1;
   }
@@ -334,6 +335,32 @@ sys_readlink(void)
   iunlockput(ip);
   
   end_op();
+  return 0;
+}
+
+uint64
+sym_handle(struct inode* ip, char *path)
+{
+  int count = 0;
+  while (ip->type == T_SYMLNK && count < MAX_DEREFERENCE) {
+    int len = 0;
+    readi(ip, 0, (uint64)&len, 0, sizeof(int));
+
+    if(len > MAXPATH)
+      panic("open: corrupted symlink inode");
+
+    readi(ip, 0, (uint64)path, sizeof(int), len + 1);
+    iunlockput(ip);
+    if((ip = namei(path)) == 0){
+      return -1;
+    }
+    ilock(ip);
+    count++;
+  }
+  if (count >= MAX_DEREFERENCE) {
+    iunlockput(ip);
+    return -1;
+  }
   return 0;
 }
 
@@ -363,28 +390,19 @@ sys_open(void)
       return -1;
     }
     ilock(ip);
-    if(ip->type == T_DIR && omode != O_RDONLY){
-      iunlockput(ip);
-      end_op();
-      return -1;
-    }
-  }
 
-  if ((ip->type == T_SYMLNK) && !(omode & O_NOSYM)){
-    while (ip->type == T_SYMLNK) {
-      int len = 0;
-      readi(ip, 0, (uint64)&len, 0, sizeof(int));
-
-      if(len > MAXPATH)
-        panic("unable to open, maxpath");
-
-      readi(ip, 0, (uint64)path, sizeof(int), len + 1);
-      iunlockput(ip);
-      if((ip = namei(path)) == 0){
+    if ((ip->type == T_SYMLNK) && !(omode & O_NOSYM)){
+      if(sym_handle(ip, path) < 0){
         end_op();
         return -1;
       }
-      ilock(ip);
+    }
+
+
+    if(ip->type == T_DIR && omode != O_RDONLY && omode != O_NOSYM){
+      iunlockput(ip);
+      end_op();
+      return -1;
     }
   }
 
@@ -472,6 +490,14 @@ sys_chdir(void)
     return -1;
   }
   ilock(ip);
+
+  if ((ip->type == T_SYMLNK)){
+    if(sym_handle(ip, path) < 0){
+      end_op();
+      return -1;
+    }
+  }
+
   if(ip->type != T_DIR){
     iunlockput(ip);
     end_op();
@@ -490,10 +516,23 @@ sys_exec(void)
   char path[MAXPATH], *argv[MAXARG];
   int i;
   uint64 uargv, uarg;
+  struct inode* ip;
 
   if(argstr(0, path, MAXPATH) < 0 || argaddr(1, &uargv) < 0){
     return -1;
   }
+
+  if((ip = namei(path)) == 0){
+    end_op();
+    return -1;
+  }
+  ilock(ip);
+  if ((ip->type == T_SYMLNK)){
+    if(sym_handle(ip, path) < 0)
+      return -1;
+  }
+  iunlockput(ip);
+
   memset(argv, 0, sizeof(argv));
   for(i=0;; i++){
     if(i >= NELEM(argv)){

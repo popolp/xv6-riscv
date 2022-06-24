@@ -436,57 +436,57 @@ iputtest(char *s)
   }
 }
 
-// void
-// chdir_sym_link(char *s)
-// {
-//   // create dir
-//   if(mkdir("dir") < 0){
-//     printf("%s: mkdir failed\n", s);
-//     exit(1);
-//   }
+void
+chdir_sym_link(char *s)
+{
+  // create dir
+  if(mkdir("dir") < 0){
+    printf("%s: mkdir failed\n", s);
+    exit(1);
+  }
 
-//   // create symbolic dir for dir
-//   if(symlink("dir", "sym_dir") < 0){
-//     printf("%s: symlink iputdir failed\n", s);
-//     exit(1);
-//   }
+  // create symbolic dir for dir
+  if(symlink("dir", "sym_dir") < 0){
+    printf("%s: symlink iputdir failed\n", s);
+    exit(1);
+  }
 
-//   // make sure the symbolic dir works
-//   if(chdir("sym_dir") < 0){
-//     printf("%s: chdir sym_dir failed\n", s);
-//     exit(1);
-//   }
+  // make sure the symbolic dir works
+  if(chdir("sym_dir") < 0){
+    printf("%s: chdir sym_dir failed\n", s);
+    exit(1);
+  }
 
-//   // return to root
-//   if(chdir("/") < 0){
-//     printf("%s: chdir / failed\n", s);
-//     exit(1);
-//   }
+  // return to root
+  if(chdir("/") < 0){
+    printf("%s: chdir / failed\n", s);
+    exit(1);
+  }
 
-//   // make sure the original dir works
-//   if(chdir("dir") < 0){
-//     printf("%s: chdir dir failed\n", s);
-//     exit(1);
-//   }
+  // make sure the original dir works
+  if(chdir("dir") < 0){
+    printf("%s: chdir dir failed\n", s);
+    exit(1);
+  }
 
-//   // return to root
-//   if(chdir("/") < 0){
-//     printf("%s: chdir  failed\n", s);
-//     exit(1);
-//   }
+  // return to root
+  if(chdir("/") < 0){
+    printf("%s: chdir  failed\n", s);
+    exit(1);
+  }
 
-//   // unlink the original dir
-//   if(unlink("dir") < 0){
-//     printf("%s: unlink dir failed\n", s);
-//     exit(1);
-//   }
+  // unlink the original dir
+  if(unlink("dir") < 0){
+    printf("%s: unlink dir failed\n", s);
+    exit(1);
+  }
 
-//   // unlink the symbolic dir
-//   if(unlink("sym_dir") < 0){
-//     printf("%s: unlink sym_dir failed\n", s);
-//     exit(1);
-//   }
-// }
+  // unlink the symbolic dir
+  if(unlink("sym_dir") < 0){
+    printf("%s: unlink sym_dir failed\n", s);
+    exit(1);
+  }
+}
 
 // does exit() call iput(p->cwd) in a transaction?
 void
@@ -2824,87 +2824,87 @@ countfree()
   return n;
 }
 
-// void
-// test_readlink(char *s)
-// {
-//   // create a symlink to echo
-//   if(symlink("echo", "sym_echo") < 0){
-//     printf("%s: symlink echo failed\n", s);
-//     exit(1);
-//   }
+void
+test_readlink(char *s)
+{
+  // create a symlink to echo
+  if(symlink("echo", "sym_echo") < 0){
+    printf("%s: symlink echo failed\n", s);
+    exit(1);
+  }
 
-//   // read the symlink
-//   char buf[MAXPATH]; 
-//   if(readlink("sym_echo", buf, MAXPATH)){
-//     printf("%s: error: readlink failed!\n", s);
-//     exit(1);
-//   }
+  // read the symlink
+  char buf[MAXPATH]; 
+  if(readlink("sym_echo", buf, MAXPATH)){
+    printf("%s: error: readlink failed!\n", s);
+    exit(1);
+  }
 
-//   // vaildate the symlink
-//   if(strcmp(buf, "echo") != 0){
-//     printf("%s: error: test_readlink failed!\n", s);
-//     exit(1);
-//   }
+  // vaildate the symlink
+  if(strcmp(buf, "echo") != 0){
+    printf("%s: error: test_readlink failed!\n", s);
+    exit(1);
+  }
 
-//   // remove the symlink
-//   if(unlink("sym_echo") < 0){
-//     printf("%s: unlink sym_echo failed!\n", s);
-//     exit(1);
-//   }
-// }
+  // remove the symlink
+  if(unlink("sym_echo") < 0){
+    printf("%s: unlink sym_echo failed!\n", s);
+    exit(1);
+  }
+}
 
-// void
-// test_sym_unlink(char *s){
-//   // create dir
-//   if(mkdir("dir") < 0){
-//     printf("%s: mkdir dir failed\n", s);
-//     exit(1);
-//   }
+void
+test_sym_unlink(char *s){
+  // create dir
+  if(mkdir("dir") < 0){
+    printf("%s: mkdir dir failed\n", s);
+    exit(1);
+  }
   
-//   // create symbolic dir for dir
-//   if (symlink("dir", "sym_dir") < 0)
-//   {
-//     printf("%s: symlink dir failed\n", s);
-//     exit(1);
-//   }
+  // create symbolic dir for dir
+  if (symlink("dir", "sym_dir") < 0)
+  {
+    printf("%s: symlink dir failed\n", s);
+    exit(1);
+  }
 
-//   // unlink symbolic dir
-//   if (unlink("sym_dir") < 0)
-//   {
-//     printf("%s: unlink sym_dir failed\n", s);
-//     exit(1);
-//   }
+  // unlink symbolic dir
+  if (unlink("sym_dir") < 0)
+  {
+    printf("%s: unlink sym_dir failed\n", s);
+    exit(1);
+  }
 
-//   // make sure the symbolic dir was unlinked (chdir(sym_dir) should fail)
-//   if(chdir("sym_dir") >= 0){
-//     printf("%s: chdir symbol dir should have failed\n", s);
-//     exit(1);
-//   }
+  // make sure the symbolic dir was unlinked (chdir(sym_dir) should fail)
+  if(chdir("sym_dir") >= 0){
+    printf("%s: chdir symbol dir should have failed\n", s);
+    exit(1);
+  }
 
-//   // make sure the original dir is still linked
-//   if(chdir("dir") < 0){
-//     printf("%s: chdir dir failed\n", s);
-//     exit(1);
-//   }
+  // make sure the original dir is still linked
+  if(chdir("dir") < 0){
+    printf("%s: chdir dir failed\n", s);
+    exit(1);
+  }
 
-//   // return to root
-//   if(chdir("/") < 0){
-//     printf("%s: chdir / failed\n", s);
-//     exit(1);
-//   }
+  // return to root
+  if(chdir("/") < 0){
+    printf("%s: chdir / failed\n", s);
+    exit(1);
+  }
 
-//   // unlink original dir
-//   if(unlink("dir") < 0){
-//     printf("%s: unlink dir failed\n", s);
-//     exit(1);
-//   }
+  // unlink original dir
+  if(unlink("dir") < 0){
+    printf("%s: unlink dir failed\n", s);
+    exit(1);
+  }
 
-//   // make sure the original dir was unlinked (chdir(sym_dir) should fail)
-//   if(chdir("dir") >= 0){
-//     printf("%s: chdir dir should have failed\n", s);
-//     exit(1);
-//   }
-// }
+  // make sure the original dir was unlinked (chdir(sym_dir) should fail)
+  if(chdir("dir") >= 0){
+    printf("%s: chdir dir should have failed\n", s);
+    exit(1);
+  }
+}
 
 void
 writeten(char *s)
@@ -2981,49 +2981,49 @@ writeten(char *s)
   }
 }
 
-// void
-// unlink_empty_dir(char *s){
-//   if(mkdir("empty_dir") < 0){
-//     printf("%s: mkdir empty_dir failed\n", s);
-//     exit(1);
-//   }
-//   if(unlink("empty_dir") < 0){
-//     printf("%s: unlink empty_dir failed\n", s);
-//     exit(1);
-//   }
-// }
+void
+unlink_empty_dir(char *s){
+  if(mkdir("empty_dir") < 0){
+    printf("%s: mkdir empty_dir failed\n", s);
+    exit(1);
+  }
+  if(unlink("empty_dir") < 0){
+    printf("%s: unlink empty_dir failed\n", s);
+    exit(1);
+  }
+}
 
-// void
-// unlink_dir(char *s){
-//   if(mkdir("dir") < 0){
-//     printf("%s: mkdir dir failed\n", s);
-//     exit(1);
-//   }
-//   if(chdir("dir") < 0){
-//     printf("%s: chdir dir failed\n", s);
-//     exit(1);
-//   }
-//   if(mkdir("anotherdir") < 0){
-//     printf("%s: mkdir anotherdir failed\n", s);
-//     exit(1);
-//   }
-//   if(chdir("/") < 0){
-//     printf("%s: chdir / failed\n", s);
-//     exit(1);
-//   }
-//   if(unlink("dir") == 0){
-//     printf("%s: unlink dir should fail since dir isn't empty\n", s);
-//     exit(1);
-//   }
-//   if(unlink("dir/anotherdir") < 0){
-//     printf("%s: unlink anotherdir failed\n", s);
-//     exit(1);
-//   }
-//   if(unlink("dir") < 0){
-//     printf("%s: unlink dir failed\n", s);
-//     exit(1);
-//   }
-// }
+void
+unlink_dir(char *s){
+  if(mkdir("dir") < 0){
+    printf("%s: mkdir dir failed\n", s);
+    exit(1);
+  }
+  if(chdir("dir") < 0){
+    printf("%s: chdir dir failed\n", s);
+    exit(1);
+  }
+  if(mkdir("anotherdir") < 0){
+    printf("%s: mkdir anotherdir failed\n", s);
+    exit(1);
+  }
+  if(chdir("/") < 0){
+    printf("%s: chdir / failed\n", s);
+    exit(1);
+  }
+  if(unlink("dir") == 0){
+    printf("%s: unlink dir should fail since dir isn't empty\n", s);
+    exit(1);
+  }
+  if(unlink("dir/anotherdir") < 0){
+    printf("%s: unlink anotherdir failed\n", s);
+    exit(1);
+  }
+  if(unlink("dir") < 0){
+    printf("%s: unlink dir failed\n", s);
+    exit(1);
+  }
+}
 
 // run each test in its own process. run returns 1 if child's exit()
 // indicates success.
@@ -3122,11 +3122,11 @@ main(int argc, char *argv[])
     {writeten, "writeten"},
     // ***************************** //
     // Tests part 2 of the assignment
-    // {unlink_empty_dir, "unlink_empty_dir"},
-    // {unlink_dir, "unlink_dir"},
-    // {test_readlink, "test_readlink"},
-    // {chdir_sym_link, "chdir_sym_link"},
-    // {test_sym_unlink, "test_sym_unlink"},
+    {unlink_empty_dir, "unlink_empty_dir"},
+    {unlink_dir, "unlink_dir"},
+    {test_readlink, "test_readlink"},
+    {chdir_sym_link, "chdir_sym_link"},
+    {test_sym_unlink, "test_sym_unlink"},
     // ***************************** //
     {createtest, "createtest"},
     {openiputtest, "openiput"},

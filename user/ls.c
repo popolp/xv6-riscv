@@ -2,6 +2,7 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 #include "kernel/fs.h"
+#include "kernel/fcntl.h"
 
 char*
 fmtname(char *path)
@@ -22,6 +23,30 @@ fmtname(char *path)
   return buf;
 }
 
+char*
+fmtsymname(char *path)
+{
+  static char buf[DIRSIZ+1], symlinkpath[512];
+  char *p;
+
+  readlink(path, symlinkpath, sizeof(symlinkpath));
+
+  // Find first character after last slash.
+  for(p=path+strlen(path); p >= path && *p != '/'; p--)
+    ;
+  p++;
+
+  // Return blank-padded name.
+  //if(strlen(p) + 2 + strlen(symlinkpath) >= DIRSIZ)
+   // return p;
+  memmove(buf, p, strlen(p));
+  memmove(buf +strlen(p), "->", 2);
+
+  memmove(buf + strlen(p) + 2, symlinkpath, strlen(symlinkpath));
+  memset(buf+strlen(p) + 2 + strlen(symlinkpath), ' ', DIRSIZ-strlen(p)-2- strlen(symlinkpath));
+  return buf;
+}
+
 void
 ls(char *path)
 {
@@ -30,7 +55,7 @@ ls(char *path)
   struct dirent de;
   struct stat st;
 
-  if((fd = open(path, 0)) < 0){
+  if((fd = open(path, O_RDONLY|O_NOSYM)) < 0){
     fprintf(2, "ls: cannot open %s\n", path);
     return;
   }
@@ -42,6 +67,9 @@ ls(char *path)
   }
 
   switch(st.type){
+  case T_SYMLNK:
+    printf("%s %d %d %d\n", fmtsymname(buf), st.type, st.ino, st.size);
+
   case T_FILE:
     printf("%s %d %d %l\n", fmtname(path), st.type, st.ino, st.size);
     break;
@@ -63,7 +91,11 @@ ls(char *path)
         printf("ls: cannot stat %s\n", buf);
         continue;
       }
-      printf("%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
+      if (st.type == T_SYMLNK){
+        printf("%s %d %d %d\n", fmtsymname(buf), st.type, st.ino, st.size);
+      }
+      else
+        printf("%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
     }
     break;
   }
